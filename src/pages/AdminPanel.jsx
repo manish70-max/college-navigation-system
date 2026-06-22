@@ -200,7 +200,7 @@ const AdminPanel = () => {
       <h1 className="text-3xl font-bold mb-6">Admin Panel</h1>
 
       {/* Tabs */}
-      <div className="flex space-x-2 mb-6 border-b">
+      <div className="flex overflow-x-auto  space-x-2 mb-6 border-b">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           return (

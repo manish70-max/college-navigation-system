@@ -2,9 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { getBuildings, getFloors, getRooms } from "../services/api";
 import { Link } from "react-router-dom";
-import { Building2, MapPin } from "lucide-react";
+import { Building2, MapPin, Menu, X } from "lucide-react";
 
-// Component to update map view dynamically
+// Map view updater
 function MapViewUpdater({ center, zoom }) {
   const map = useMap();
   useEffect(() => {
@@ -19,7 +19,7 @@ const CampusMap = () => {
     name: "Sigma College",
     description: "Main Campus",
     latitude: 22.324651052939384,
-    longitude: 73.28028071911696
+    longitude: 73.28028071911696,
   };
 
   const [buildings, setBuildings] = useState([collegeBuilding]);
@@ -28,38 +28,36 @@ const CampusMap = () => {
   const [floors, setFloors] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [mapCenter, setMapCenter] = useState([collegeBuilding.latitude, collegeBuilding.longitude]);
+  const [mapCenter, setMapCenter] = useState([
+    collegeBuilding.latitude,
+    collegeBuilding.longitude,
+  ]);
   const [mapZoom, setMapZoom] = useState(15);
 
-  // Map ref for flyTo
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const mapRef = useRef();
 
-  // Fetch buildings and setup live location
+  // Fetch buildings + live location
   useEffect(() => {
     const fetchBuildings = async () => {
       try {
-        const response = await getBuildings();
-        setBuildings((prev) => [...prev, ...response.data.filter(b => b._id !== collegeBuilding._id)]);
-        if (response.data.length > 0) {
-          setMapCenter([response.data[0].latitude, response.data[0].longitude]);
-        }
-      } catch (error) {
-        console.error("Error fetching buildings:", error);
+        const res = await getBuildings();
+        setBuildings((prev) => [
+          ...prev,
+          ...res.data.filter((b) => b._id !== collegeBuilding._id),
+        ]);
+      } catch (err) {
+        console.error(err);
       }
     };
-    fetchBuildings()
+    fetchBuildings();
 
-    // Live location tracking
     if (navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const coords = [position.coords.latitude, position.coords.longitude];
-          setCurrentLocation(coords);
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-        },
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 5000 }
+        (pos) =>
+          setCurrentLocation([pos.coords.latitude, pos.coords.longitude]),
+        (err) => console.error(err),
+        { enableHighAccuracy: true }
       );
       return () => navigator.geolocation.clearWatch(watchId);
     }
@@ -70,11 +68,11 @@ const CampusMap = () => {
     const fetchFloors = async () => {
       if (!selectedBuilding) return;
       try {
-        const response = await getFloors(selectedBuilding);
-        setFloors(response.data);
-        if (response.data.length > 0) setSelectedFloor(response.data[0]._id);
-      } catch (error) {
-        console.error("Error fetching floors:", error);
+        const res = await getFloors(selectedBuilding);
+        setFloors(res.data);
+        if (res.data.length > 0) setSelectedFloor(res.data[0]._id);
+      } catch (err) {
+        console.error(err);
       }
     };
     fetchFloors();
@@ -85,52 +83,75 @@ const CampusMap = () => {
     const fetchRooms = async () => {
       if (!selectedBuilding || !selectedFloor) return;
       try {
-        const response = await getRooms({ building_id: selectedBuilding, floor_id: selectedFloor });
-        setRooms(response.data);
-      } catch (error) {
-        console.error("Error fetching rooms:", error);
+        const res = await getRooms({
+          building_id: selectedBuilding,
+          floor_id: selectedFloor,
+        });
+        setRooms(res.data);
+      } catch (err) {
+        console.error(err);
       }
     };
     fetchRooms();
   }, [selectedBuilding, selectedFloor]);
 
-  const handleBuildingClick = (building) => {
-    setSelectedBuilding(building._id);
-    setMapCenter([building.latitude, building.longitude]);
+  // Building click
+  const handleBuildingClick = (b) => {
+    setSelectedBuilding(b._id);
+    setMapCenter([b.latitude, b.longitude]);
     setMapZoom(18);
-    // Fly animation
-    if (mapRef.current) {
-      mapRef.current.flyTo([building.latitude, building.longitude], 18, { animate: true, duration: 2 });
-    }
-  };
+    setSidebarOpen(false);
 
-  const handleShowUserLocation = () => {
-    if (currentLocation && mapRef.current) {
-      mapRef.current.flyTo(currentLocation, 18, { animate: true, duration: 2 });
+    if (mapRef.current) {
+      mapRef.current.flyTo([b.latitude, b.longitude], 18, {
+        animate: true,
+        duration: 2,
+      });
     }
   };
 
   return (
-    <div className="h-screen flex">
-      {/* Sidebar */}
-      <div className="w-80 bg-white shadow-lg overflow-y-auto p-4">
-        <h2 className="text-2xl font-bold mb-4">Campus Map</h2>
+    <>
+      {/* Mobile header */}
+      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white shadow-md p-4 z-50 flex justify-between items-center">
+        <h2 className="text-xl font-bold">Campus Map</h2>
+        <button onClick={() => setSidebarOpen(true)}>
+          <Menu className="h-7 w-7" />
+        </button>
+      </div>
 
-        {/* Buildings */}
-        <div className="mb-6">
+      <div className="flex h-screen pt-14 lg:pt-0">
+
+        {/* Sidebar / Drawer */}
+        <div
+          className={`fixed lg:static inset-y-0 left-0 w-72 bg-white shadow-lg p-4 overflow-y-auto 
+          transform transition-transform duration-300 z-50
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        >
+
+          {/* Mobile close button */}
+          <div className="lg:hidden flex justify-end mb-3">
+            <button onClick={() => setSidebarOpen(false)}>
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <h2 className="text-2xl font-bold mb-4 hidden lg:block">Campus Map</h2>
+
+          {/* Buildings */}
           <h3 className="font-semibold mb-2">Buildings</h3>
-          <div className="space-y-2">
+          <div className="space-y-2 mb-6">
             {buildings.map((b) => (
               <button
                 key={b._id}
                 onClick={() => handleBuildingClick(b)}
-                className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                className={`w-full text-left p-3 rounded-lg border ${
                   selectedBuilding === b._id
-                    ? "bg-primary-100 border-primary-500"
-                    : "bg-white border-gray-200 hover:bg-gray-50"
+                    ? "bg-blue-100 border-blue-500"
+                    : "border-gray-300"
                 }`}
               >
-                <div className="flex items-center space-x-2">
+                <div className="flex space-x-2">
                   <Building2 className="h-5 w-5" />
                   <div>
                     <p className="font-medium">{b.name}</p>
@@ -140,137 +161,95 @@ const CampusMap = () => {
               </button>
             ))}
           </div>
+
+          {/* Floors */}
+          {floors.length > 0 && (
+            <>
+              <h3 className="font-semibold mb-2">Floors</h3>
+              <div className="space-y-2 mb-6">
+                {floors.map((f) => (
+                  <button
+                    key={f._id}
+                    onClick={() => setSelectedFloor(f._id)}
+                    className={`w-full p-3 rounded-lg border ${
+                      selectedFloor === f._id
+                        ? "bg-blue-100 border-blue-500"
+                        : "border-gray-300"
+                    }`}
+                  >
+                    {f.floor_name || `Floor ${f.floor_number}`}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Rooms */}
+          {rooms.length > 0 && (
+            <>
+              <h3 className="font-semibold mb-2">Rooms</h3>
+              <div className="space-y-2">
+                {rooms.map((room) => (
+                  <Link
+                    key={room._id}
+                    to={`/room/${room._id}`}
+                    className="block p-3 rounded-lg border border-gray-300 hover:bg-gray-100"
+                  >
+                    <p className="font-medium">{room.room_no}</p>
+                    <p className="text-sm text-gray-600">{room.type}</p>
+                  </Link>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Floors */}
-        {selectedBuilding && floors.length > 0 && (
-          <div className="mb-6">
-            <h3 className="font-semibold mb-2">Floors</h3>
-            <div className="space-y-2">
-              {floors.map((floor) => (
-                <button
-                  key={floor._id}
-                  onClick={() => setSelectedFloor(floor._id)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${
-                    selectedFloor === floor._id
-                      ? "bg-primary-100 border-primary-500"
-                      : "bg-white border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  {floor.floor_name || `Floor ${floor.floor_number}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Rooms */}
-        {rooms.length > 0 && (
-          <div>
-            <h3 className="font-semibold mb-2">Rooms</h3>
-            <div className="space-y-2">
-              {rooms.map((room) => (
-                <Link
-                  key={room._id}
-                  to={`/room/${room._id}`}
-                  className="block p-3 rounded-lg border border-gray-200 hover:bg-gray-50"
-                >
-                  <p className="font-medium">{room.room_no}</p>
-                  <p className="text-sm text-gray-600">{room.type}</p>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Show My Location */}
-        {currentLocation && (
-          <button
-            onClick={handleShowUserLocation}
-            className="mt-4 w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700"
+        {/* Map Section */}
+        <div className="flex-1 relative">
+          <MapContainer
+            center={mapCenter}
+            zoom={mapZoom}
+            style={{ height: "100%", width: "100%" }}
+            ref={mapRef}
           >
-            Show My Location
-          </button>
-        )}
-      </div>
+            <MapViewUpdater center={mapCenter} zoom={mapZoom} />
 
-      {/* Map */}
-      <div className="flex-1 relative">
-        <MapContainer
-          center={mapCenter}
-          zoom={mapZoom}
-          style={{ height: "100%", width: "100%" }}
-          ref={mapRef}
-        >
-          <MapViewUpdater center={mapCenter} zoom={mapZoom} />
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-      <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: "100%", width: "100%" }}>
-  <MapViewUpdater center={mapCenter} zoom={mapZoom} />
-  
-  <TileLayer
-    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-  />
+            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-  {/* College Marker */}
-  <Marker position={[collegeBuilding.latitude, collegeBuilding.longitude]}>
-    <Popup>
-      <h3 className="font-semibold">{collegeBuilding.name}</h3>
-      <p className="text-sm">{collegeBuilding.description}</p>
-      <Link to={`/building/${collegeBuilding._id}`} className="text-primary-600 hover:underline">
-        View Details
-      </Link>
-    </Popup>
-  </Marker>
+            {buildings.map((b) => (
+              <Marker key={b._id} position={[b.latitude, b.longitude]}>
+                <Popup>
+                  <h3 className="font-semibold">{b.name}</h3>
+                  <p>{b.description}</p>
+                </Popup>
+              </Marker>
+            ))}
 
-  {/* Agar buildings aur user location bhi dikhana hai */}
-  {buildings.map((b) => b._id !== collegeBuilding._id && (
-    <Marker key={b._id} position={[b.latitude, b.longitude]}>
-      <Popup>
-        <h3 className="font-semibold">{b.name}</h3>
-        <p className="text-sm">{b.description}</p>
-      </Popup>
-    </Marker>
-  ))}
+            {currentLocation && (
+              <Marker position={currentLocation}>
+                <Popup>
+                  <div className="flex items-center gap-2">
+                    <MapPin /> <span>You are here</span>
+                  </div>
+                </Popup>
+              </Marker>
+            )}
+          </MapContainer>
 
-  {currentLocation && (
-    <Marker position={currentLocation}>
-      <Popup className="flex items-center space-x-2">
-        <MapPin className="h-5 w-5 text-primary-600" />
-        <span>You are here</span>
-      </Popup>
-    </Marker>
-  )}
-</MapContainer>
-
-          {/* Buildings */}
-          {buildings.map((b) => (
-            <Marker key={b._id} position={[b.latitude, b.longitude]}>
-              <Popup>
-                <h3 className="font-semibold">{b.name}</h3>
-                <p className="text-sm">{b.description}</p>
-                <Link to={`/building/${b._id}`} className="text-primary-600 hover:underline">
-                  View Details
-                </Link>
-              </Popup>
-            </Marker>
-          ))}
-
-          {/* User Location */}
+          {/* My Location Button (Mobile Only) */}
           {currentLocation && (
-            <Marker position={currentLocation}>
-              <Popup className="flex items-center space-x-2">
-                <MapPin className="h-5 w-5 text-primary-600" />
-                <span>You are here</span>
-              </Popup>
-            </Marker>
+            <button
+              onClick={() =>
+                mapRef.current?.flyTo(currentLocation, 18, { animate: true })
+              }
+              className="lg:hidden absolute bottom-5 right-5 bg-blue-600 text-white px-4 py-2 rounded-xl shadow-lg"
+            >
+              My Location
+            </button>
           )}
-        </MapContainer>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
